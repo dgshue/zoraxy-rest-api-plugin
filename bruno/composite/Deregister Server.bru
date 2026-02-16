@@ -1,0 +1,23 @@
+meta {
+  name: Deregister Server
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/deregister-server
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "hostname": "clientui-us.example.com",
+    "backend_url": "10.0.1.50:8080"
+  }
+}

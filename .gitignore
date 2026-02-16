@@ -1,0 +1,7 @@
+config.json
+zoraxy-lb-plugin
+zoraxy-lb-plugin.exe
+*.exe
+*.dll
+*.so
+*.dylib

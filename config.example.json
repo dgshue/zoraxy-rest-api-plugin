@@ -1,0 +1,6 @@
+{
+  "bearer_token": "your-secure-token-here",
+  "zoraxy_url": "http://localhost:8000",
+  "zoraxy_user": "admin",
+  "zoraxy_pass": "your-zoraxy-admin-password"
+}

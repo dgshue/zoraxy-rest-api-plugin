@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LB Manager</title>
+    <link rel="stylesheet" href="/script/semantic/semantic.min.css">
+    <link rel="stylesheet" href="/main.css">
+    <style>
+        body { padding: 1em; font-family: Arial, sans-serif; }
+        .endpoint { margin-bottom: 0.5em; }
+        .method { display: inline-block; width: 60px; font-weight: bold; font-size: 0.85em; padding: 2px 6px; border-radius: 3px; text-align: center; margin-right: 8px; }
+        .method.get { background: #61affe; color: #fff; }
+        .method.post { background: #49cc90; color: #fff; }
+        .method.delete { background: #f93e3e; color: #fff; }
+        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+        pre { background: #f8f8f8; padding: 1em; border-radius: 4px; overflow-x: auto; }
+        h3 { margin-top: 1.5em; border-bottom: 1px solid #ddd; padding-bottom: 0.3em; }
+    </style>
+</head>
+<body>
+    <div class="ui container">
+        <h2>LB Manager Plugin</h2>
+        <p>REST API for managing Zoraxy load balancer configuration with bearer token authentication.</p>
+        <p>Use an API client (Bruno, curl, etc.) to interact with these endpoints.</p>
+
+        <h3>Authentication</h3>
+        <p>All endpoints require a bearer token in the <code>Authorization</code> header:</p>
+        <pre>Authorization: Bearer &lt;your-token&gt;</pre>
+
+        <h3>Pipeline Endpoints (Composite)</h3>
+        <div class="endpoint"><span class="method post">POST</span> <code>/api/register-server</code> — Register a server (creates proxy + upstream + aliases)</div>
+        <div class="endpoint"><span class="method post">POST</span> <code>/api/deregister-server</code> — Remove a server from the LB pool</div>
+
+        <h3>Proxy Management</h3>
+        <div class="endpoint"><span class="method get">GET</span> <code>/api/proxy/list</code> — List all proxy rules</div>
+        <div class="endpoint"><span class="method get">GET</span> <code>/api/proxy/detail?ep=hostname</code> — Get proxy details</div>
+        <div class="endpoint"><span class="method post">POST</span> <code>/api/proxy/add</code> — Create proxy rule</div>
+        <div class="endpoint"><span class="method post">POST</span> <code>/api/proxy/edit</code> — Edit proxy rule</div>
+        <div class="endpoint"><span class="method post">POST</span> <code>/api/proxy/delete</code> — Delete proxy rule</div>
+
+        <h3>Upstream (LB) Management</h3>
+        <div class="endpoint"><span class="method get">GET</span> <code>/api/upstream/list?ep=hostname</code> — List upstreams for a proxy</div>
+        <div class="endpoint"><span class="method post">POST</span> <code>/api/upstream/add</code> — Add upstream server</div>
+        <div class="endpoint"><span class="method post">POST</span> <code>/api/upstream/update</code> — Update upstream server</div>
+        <div class="endpoint"><span class="method post">POST</span> <code>/api/upstream/remove</code> — Remove upstream server</div>
+
+        <h3>Other</h3>
+        <div class="endpoint"><span class="method post">POST</span> <code>/api/alias/set</code> — Set aliases for a proxy</div>
+        <div class="endpoint"><span class="method get">GET</span> <code>/api/cert/list</code> — List certificates</div>
+        <div class="endpoint"><span class="method get">GET</span> <code>/api/health</code> — Health check</div>
+
+        <h3>Example: Register Server</h3>
+        <pre>{
+  "hostname": "clientui-us.example.com",
+  "backend_url": "10.0.1.50:8080",
+  "require_tls": true,
+  "skip_tls_verify": false,
+  "weight": 1,
+  "aliases": ["clientui.example.com"],
+  "tags": ["us-lb", "client-ui"]
+}</pre>
+    </div>
+</body>
+</html>

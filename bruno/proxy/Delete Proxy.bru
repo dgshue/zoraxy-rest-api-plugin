@@ -1,0 +1,23 @@
+meta {
+  name: Delete Proxy
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/proxy/delete
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "type": "host",
+    "ep": "clientui-us.example.com"
+  }
+}

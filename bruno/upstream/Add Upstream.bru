@@ -1,0 +1,27 @@
+meta {
+  name: Add Upstream
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/upstream/add
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "type": "host",
+    "ep": "clientui-us.example.com",
+    "origin": "10.0.1.51:8080",
+    "tls": "true",
+    "tlsval": "false",
+    "weight": "1"
+  }
+}

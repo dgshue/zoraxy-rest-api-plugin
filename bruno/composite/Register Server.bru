@@ -1,0 +1,28 @@
+meta {
+  name: Register Server
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/register-server
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "hostname": "clientui-us.example.com",
+    "backend_url": "10.0.1.50:8080",
+    "require_tls": true,
+    "skip_tls_verify": false,
+    "weight": 1,
+    "aliases": ["clientui.example.com"],
+    "tags": ["us-lb", "client-ui"]
+  }
+}

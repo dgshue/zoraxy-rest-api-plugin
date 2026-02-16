@@ -1,0 +1,26 @@
+meta {
+  name: Add Proxy
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/proxy/add
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "type": "host",
+    "rootname": "clientui-us.example.com",
+    "ep": "10.0.1.50:8080",
+    "tls": "true",
+    "tlsval": "false"
+  }
+}

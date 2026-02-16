@@ -1,0 +1,24 @@
+meta {
+  name: Remove Upstream
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/upstream/remove
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "type": "host",
+    "ep": "clientui-us.example.com",
+    "origin": "10.0.1.51:8080"
+  }
+}

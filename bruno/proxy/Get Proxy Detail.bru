@@ -1,0 +1,15 @@
+meta {
+  name: Get Proxy Detail
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/proxy/detail?type=host&ep=clientui-us.example.com
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{token}}
+}

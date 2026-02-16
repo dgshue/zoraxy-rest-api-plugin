@@ -1,0 +1,15 @@
+meta {
+  name: List Proxies
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/proxy/list
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{token}}
+}
