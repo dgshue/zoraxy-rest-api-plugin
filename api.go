@@ -334,16 +334,24 @@ func (a *APIHandler) handleCertList(w http.ResponseWriter, r *http.Request) {
 // handleCertUpload uploads a certificate to Zoraxy.
 // Accepts PFX (PKCS12) format and converts to PEM automatically.
 //
+// Use "domains" (array) to install one SAN cert under multiple domain names.
+// Zoraxy stores certs by filename, so each domain that needs TLS should have
+// the cert installed under its name. The same PFX is uploaded once and installed
+// for every listed domain.
+//
 // Supports two modes:
-//   1. Multipart form: field "file" (PFX binary), "domain", "password" (optional)
-//   2. JSON body: {"domain": "...", "pfx_base64": "...", "password": "..."} for pipeline use
+//   1. Multipart form: field "file" (PFX binary), "domain"/"domains", "password" (optional)
+//   2. JSON body: {"domains": [...], "pfx_base64": "...", "password": "..."} for pipeline use
+//
+// "domain" (string) still works for single-domain installs.
 func (a *APIHandler) handleCertUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonError(w, "Method not allowed, use POST", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var domain, password string
+	var domains []string
+	var password string
 	var pfxData []byte
 
 	contentType := r.Header.Get("Content-Type")
@@ -354,8 +362,17 @@ func (a *APIHandler) handleCertUpload(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, "Failed to parse multipart form: "+err.Error(), http.StatusBadRequest)
 			return
 		}
-		domain = r.FormValue("domain")
 		password = r.FormValue("password")
+
+		// Support both "domain" (single) and "domains" (JSON array)
+		if domainsJSON := r.FormValue("domains"); domainsJSON != "" {
+			if err := json.Unmarshal([]byte(domainsJSON), &domains); err != nil {
+				jsonError(w, "Invalid domains JSON array: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+		} else if d := r.FormValue("domain"); d != "" {
+			domains = []string{d}
+		}
 
 		file, _, err := r.FormFile("file")
 		if err != nil {
@@ -372,16 +389,22 @@ func (a *APIHandler) handleCertUpload(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// JSON body with base64-encoded PFX
 		var body struct {
-			Domain    string `json:"domain"`
-			PFXBase64 string `json:"pfx_base64"`
-			Password  string `json:"password"`
+			Domain    string   `json:"domain"`
+			Domains   []string `json:"domains"`
+			PFXBase64 string   `json:"pfx_base64"`
+			Password  string   `json:"password"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			jsonError(w, "Invalid JSON body: "+err.Error(), http.StatusBadRequest)
 			return
 		}
-		domain = body.Domain
 		password = body.Password
+
+		if len(body.Domains) > 0 {
+			domains = body.Domains
+		} else if body.Domain != "" {
+			domains = []string{body.Domain}
+		}
 
 		var err error
 		pfxData, err = base64.StdEncoding.DecodeString(body.PFXBase64)
@@ -391,8 +414,8 @@ func (a *APIHandler) handleCertUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if domain == "" {
-		jsonError(w, "Missing required field: domain", http.StatusBadRequest)
+	if len(domains) == 0 {
+		jsonError(w, "Missing required field: domain or domains", http.StatusBadRequest)
 		return
 	}
 	if len(pfxData) == 0 {
@@ -407,30 +430,37 @@ func (a *APIHandler) handleCertUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := make(map[string]interface{})
+	// Install cert under each domain name
+	domainResults := make([]map[string]interface{}, 0, len(domains))
+	for _, domain := range domains {
+		dr := map[string]interface{}{"domain": domain}
 
-	// Upload public cert (PEM)
-	pubResult, err := a.zoraxy.UploadCert(domain, "pub", domain+".pem", certPEM)
-	if err != nil {
-		jsonError(w, "Failed to upload certificate: "+err.Error(), http.StatusBadGateway)
-		return
+		pubResult, err := a.zoraxy.UploadCert(domain, "pub", domain+".pem", certPEM)
+		if err != nil {
+			dr["cert_uploaded"] = false
+			dr["cert_error"] = err.Error()
+			domainResults = append(domainResults, dr)
+			continue
+		}
+		dr["cert_uploaded"] = true
+		dr["cert_result"] = rawOrString(pubResult)
+
+		keyResult, err := a.zoraxy.UploadCert(domain, "pri", domain+".key", keyPEM)
+		if err != nil {
+			dr["key_uploaded"] = false
+			dr["key_error"] = err.Error()
+			domainResults = append(domainResults, dr)
+			continue
+		}
+		dr["key_uploaded"] = true
+		dr["key_result"] = rawOrString(keyResult)
+		domainResults = append(domainResults, dr)
 	}
-	results["cert_uploaded"] = true
-	results["cert_result"] = rawOrString(pubResult)
 
-	// Upload private key
-	keyResult, err := a.zoraxy.UploadCert(domain, "pri", domain+".key", keyPEM)
-	if err != nil {
-		results["key_uploaded"] = false
-		results["key_error"] = err.Error()
-		jsonOK(w, results)
-		return
-	}
-	results["key_uploaded"] = true
-	results["key_result"] = rawOrString(keyResult)
-	results["domain"] = domain
-
-	jsonOK(w, results)
+	jsonOK(w, map[string]interface{}{
+		"domains_processed": len(domains),
+		"results":           domainResults,
+	})
 }
 
 // --- Composite Operations (Pipeline-Friendly) ---
