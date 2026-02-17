@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 )
@@ -33,33 +34,32 @@ func NewZoraxyClient(baseURL, username, password string) *ZoraxyClient {
 	}
 }
 
-// fetchCSRFToken makes a GET request to obtain the CSRF cookie and token.
+// csrfMetaRe matches the masked CSRF token from Zoraxy's HTML meta tag.
+var csrfMetaRe = regexp.MustCompile(`<meta\s+name="zoraxy\.csrf\.Token"\s+content="([^"]+)"`)
+
+// fetchCSRFToken GETs an HTML page from Zoraxy and extracts the masked CSRF
+// token from the <meta name="zoraxy.csrf.Token"> tag. The cookie value and
+// the meta content are different — gorilla/csrf requires the masked token
+// from the HTML, not the raw cookie value.
 func (z *ZoraxyClient) fetchCSRFToken() error {
-	resp, err := z.client.Get(z.baseURL + "/")
+	resp, err := z.client.Get(z.baseURL + "/login.html")
 	if err != nil {
 		return fmt.Errorf("fetching CSRF token: %w", err)
 	}
 	defer resp.Body.Close()
-	io.ReadAll(resp.Body) // drain body
-
-	// Extract the CSRF token from the zoraxy_csrf cookie
-	u, _ := url.Parse(z.baseURL)
-	for _, cookie := range z.client.Jar.Cookies(u) {
-		if cookie.Name == "zoraxy_csrf" {
-			z.csrfToken = cookie.Value
-			return nil
-		}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("reading CSRF page: %w", err)
 	}
 
-	// Also check _gorilla_csrf as fallback
-	for _, cookie := range z.client.Jar.Cookies(u) {
-		if cookie.Name == "_gorilla_csrf" {
-			z.csrfToken = cookie.Value
-			return nil
-		}
+	// Extract masked token from <meta name="zoraxy.csrf.Token" content="...">
+	matches := csrfMetaRe.FindSubmatch(body)
+	if len(matches) >= 2 {
+		z.csrfToken = string(matches[1])
+		return nil
 	}
 
-	return fmt.Errorf("CSRF cookie not found in response")
+	return fmt.Errorf("CSRF meta tag not found in response")
 }
 
 // login authenticates with Zoraxy and stores the session cookie.
