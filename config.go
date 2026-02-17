@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 // Config holds plugin configuration for Zoraxy connectivity and bearer token auth.
@@ -20,6 +21,11 @@ type Config struct {
 
 	// ZoraxyPass is the admin password for Zoraxy.
 	ZoraxyPass string `json:"zoraxy_pass"`
+
+	// Port overrides the listen port. When set, the plugin ignores
+	// Zoraxy's assigned port and uses this instead. Useful for Docker
+	// where you need a predictable port for mapping.
+	Port int `json:"port,omitempty"`
 }
 
 // LoadConfig loads configuration from config.json next to the binary,
@@ -62,6 +68,11 @@ func LoadConfig() *Config {
 	}
 	if v := os.Getenv("ZORAXY_PASS"); v != "" {
 		cfg.ZoraxyPass = v
+	}
+	if v := os.Getenv("LB_MANAGER_PORT"); v != "" {
+		if p, err := strconv.Atoi(v); err == nil {
+			cfg.Port = p
+		}
 	}
 
 	return cfg

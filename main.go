@@ -41,15 +41,22 @@ func main() {
 	if err != nil {
 		// If not launched by Zoraxy, run in standalone mode
 		fmt.Println("Running in standalone mode (not launched by Zoraxy)")
-		standalonePort := os.Getenv("LB_MANAGER_PORT")
-		if standalonePort == "" {
-			standalonePort = "9776"
+		port := cfg.Port
+		if port == 0 {
+			port = 9776
 		}
-		startServer(cfg, standalonePort, 0)
+		startServer(cfg, strconv.Itoa(port), 0)
 		return
 	}
 
-	startServer(cfg, strconv.Itoa(runtimeCfg.Port), runtimeCfg.Port)
+	// In plugin mode, use config port override if set (for Docker),
+	// otherwise use Zoraxy's assigned port
+	port := runtimeCfg.Port
+	if cfg.Port > 0 {
+		port = cfg.Port
+		fmt.Printf("Port override: using %d instead of Zoraxy-assigned %d\n", cfg.Port, runtimeCfg.Port)
+	}
+	startServer(cfg, strconv.Itoa(port), runtimeCfg.Port)
 }
 
 func startServer(cfg *Config, port string, zoraxyAssignedPort int) {
@@ -92,8 +99,14 @@ func startServer(cfg *Config, port string, zoraxyAssignedPort int) {
 		})
 	}
 
-	fmt.Printf("Zoraxy REST API Plugin started at http://127.0.0.1:%s\n", port)
-	if err := http.ListenAndServe("127.0.0.1:"+port, nil); err != nil {
+	// Bind to 0.0.0.0 when port is overridden (Docker needs external access),
+	// otherwise 127.0.0.1 (Zoraxy plugin mode, local only)
+	bindAddr := "127.0.0.1"
+	if cfg.Port > 0 {
+		bindAddr = "0.0.0.0"
+	}
+	fmt.Printf("Zoraxy REST API Plugin started at http://%s:%s\n", bindAddr, port)
+	if err := http.ListenAndServe(bindAddr+":"+port, nil); err != nil {
 		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
 		os.Exit(1)
 	}
