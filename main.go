@@ -34,7 +34,7 @@ func main() {
 		URL:           "https://github.com/dgshue/zoraxy-rest-api-plugin",
 		Type:          plugin.PluginType_Utilities,
 		VersionMajor:  0,
-		VersionMinor:  1,
+		VersionMinor:  2,
 		VersionPatch:  0,
 		UIPath:        UI_PATH,
 	})
