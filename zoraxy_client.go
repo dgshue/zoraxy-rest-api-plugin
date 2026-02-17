@@ -12,14 +12,15 @@ import (
 )
 
 // ZoraxyClient handles HTTP communication with the Zoraxy admin API.
-// It manages session-based authentication (login + cookie jar).
+// It manages session-based authentication (login + cookie jar) and CSRF tokens.
 type ZoraxyClient struct {
-	baseURL  string
-	username string
-	password string
-	client   *http.Client
-	mu       sync.Mutex
-	loggedIn bool
+	baseURL   string
+	username  string
+	password  string
+	client    *http.Client
+	mu        sync.Mutex
+	loggedIn  bool
+	csrfToken string
 }
 
 func NewZoraxyClient(baseURL, username, password string) *ZoraxyClient {
@@ -32,13 +33,55 @@ func NewZoraxyClient(baseURL, username, password string) *ZoraxyClient {
 	}
 }
 
+// fetchCSRFToken makes a GET request to obtain the CSRF cookie and token.
+func (z *ZoraxyClient) fetchCSRFToken() error {
+	resp, err := z.client.Get(z.baseURL + "/")
+	if err != nil {
+		return fmt.Errorf("fetching CSRF token: %w", err)
+	}
+	defer resp.Body.Close()
+	io.ReadAll(resp.Body) // drain body
+
+	// Extract the CSRF token from the zoraxy_csrf cookie
+	u, _ := url.Parse(z.baseURL)
+	for _, cookie := range z.client.Jar.Cookies(u) {
+		if cookie.Name == "zoraxy_csrf" {
+			z.csrfToken = cookie.Value
+			return nil
+		}
+	}
+
+	// Also check _gorilla_csrf as fallback
+	for _, cookie := range z.client.Jar.Cookies(u) {
+		if cookie.Name == "_gorilla_csrf" {
+			z.csrfToken = cookie.Value
+			return nil
+		}
+	}
+
+	return fmt.Errorf("CSRF cookie not found in response")
+}
+
 // login authenticates with Zoraxy and stores the session cookie.
 func (z *ZoraxyClient) login() error {
+	// Step 1: GET to obtain CSRF token
+	if err := z.fetchCSRFToken(); err != nil {
+		return fmt.Errorf("pre-login CSRF fetch: %w", err)
+	}
+
+	// Step 2: POST login with CSRF token
 	form := url.Values{}
 	form.Set("username", z.username)
 	form.Set("password", z.password)
 
-	resp, err := z.client.PostForm(z.baseURL+"/api/auth/login", form)
+	req, err := http.NewRequest(http.MethodPost, z.baseURL+"/api/auth/login", strings.NewReader(form.Encode()))
+	if err != nil {
+		return fmt.Errorf("creating login request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-CSRF-Token", z.csrfToken)
+
+	resp, err := z.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("login request failed: %w", err)
 	}
@@ -57,6 +100,9 @@ func (z *ZoraxyClient) login() error {
 		}
 	}
 
+	// Refresh CSRF token after login (session may issue a new one)
+	z.fetchCSRFToken()
+
 	z.loggedIn = true
 	return nil
 }
@@ -71,7 +117,7 @@ func (z *ZoraxyClient) ensureLoggedIn() error {
 	return nil
 }
 
-// doRequest makes an authenticated request to Zoraxy. Retries login once on 401.
+// doRequest makes an authenticated request to Zoraxy. Retries login once on 401/403.
 func (z *ZoraxyClient) doRequest(method, path string, form url.Values) ([]byte, int, error) {
 	if err := z.ensureLoggedIn(); err != nil {
 		return nil, 0, err
@@ -82,8 +128,8 @@ func (z *ZoraxyClient) doRequest(method, path string, form url.Values) ([]byte, 
 		return nil, 0, err
 	}
 
-	// If we got a 401, try re-login once and retry
-	if status == http.StatusUnauthorized {
+	// If we got a 401 or 403 (CSRF/session expired), re-login once and retry
+	if status == http.StatusUnauthorized || status == http.StatusForbidden {
 		z.mu.Lock()
 		z.loggedIn = false
 		z.mu.Unlock()
@@ -120,6 +166,11 @@ func (z *ZoraxyClient) rawRequest(method, path string, form url.Values) ([]byte,
 	}
 	if err != nil {
 		return nil, 0, fmt.Errorf("creating request: %w", err)
+	}
+
+	// Always include CSRF token on all requests
+	if z.csrfToken != "" {
+		req.Header.Set("X-CSRF-Token", z.csrfToken)
 	}
 
 	resp, err := z.client.Do(req)
