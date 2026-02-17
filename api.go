@@ -71,6 +71,29 @@ func (a *APIHandler) RegisterRoutesStandalone() {
 	http.HandleFunc("/api/deregister-server", a.withAuth(a.handleDeregisterServer))
 }
 
+// RegisterRoutesToMux registers API endpoints on a specific http.ServeMux (external listener).
+func (a *APIHandler) RegisterRoutesToMux(mux *http.ServeMux) {
+	mux.HandleFunc("/api/health", a.withAuth(a.handleHealth))
+
+	mux.HandleFunc("/api/proxy/list", a.withAuth(a.handleProxyList))
+	mux.HandleFunc("/api/proxy/detail", a.withAuth(a.handleProxyDetail))
+	mux.HandleFunc("/api/proxy/add", a.withAuth(a.handleProxyAdd))
+	mux.HandleFunc("/api/proxy/edit", a.withAuth(a.handleProxyEdit))
+	mux.HandleFunc("/api/proxy/delete", a.withAuth(a.handleProxyDelete))
+
+	mux.HandleFunc("/api/upstream/list", a.withAuth(a.handleUpstreamList))
+	mux.HandleFunc("/api/upstream/add", a.withAuth(a.handleUpstreamAdd))
+	mux.HandleFunc("/api/upstream/update", a.withAuth(a.handleUpstreamUpdate))
+	mux.HandleFunc("/api/upstream/remove", a.withAuth(a.handleUpstreamRemove))
+
+	mux.HandleFunc("/api/alias/set", a.withAuth(a.handleAliasSet))
+
+	mux.HandleFunc("/api/cert/list", a.withAuth(a.handleCertList))
+
+	mux.HandleFunc("/api/register-server", a.withAuth(a.handleRegisterServer))
+	mux.HandleFunc("/api/deregister-server", a.withAuth(a.handleDeregisterServer))
+}
+
 // --- Auth Middleware ---
 
 func (a *APIHandler) withAuth(next http.HandlerFunc) http.HandlerFunc {
