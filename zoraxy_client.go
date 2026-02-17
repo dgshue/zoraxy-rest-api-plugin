@@ -187,6 +187,18 @@ func (z *ZoraxyClient) rawRequest(method, path string, form url.Values) ([]byte,
 	return body, resp.StatusCode, nil
 }
 
+// checkZoraxyError checks if a Zoraxy response contains an error in the JSON body.
+// Zoraxy often returns HTTP 200 with {"error":"..."} for errors.
+func checkZoraxyError(body []byte) error {
+	var resp struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &resp); err == nil && resp.Error != "" {
+		return fmt.Errorf("%s", resp.Error)
+	}
+	return nil
+}
+
 // --- Proxy Management ---
 
 // ListProxies returns all proxy endpoints.
@@ -217,6 +229,9 @@ func (z *ZoraxyClient) GetProxyDetail(epType, rootname string) (json.RawMessage,
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("get proxy detail failed (HTTP %d): %s", status, string(body))
 	}
+	if err := checkZoraxyError(body); err != nil {
+		return nil, err
+	}
 	return json.RawMessage(body), nil
 }
 
@@ -232,6 +247,9 @@ func (z *ZoraxyClient) AddProxy(params map[string]string) (json.RawMessage, erro
 	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("add proxy failed (HTTP %d): %s", status, string(body))
+	}
+	if err := checkZoraxyError(body); err != nil {
+		return nil, err
 	}
 	return json.RawMessage(body), nil
 }
@@ -298,6 +316,9 @@ func (z *ZoraxyClient) AddUpstream(params map[string]string) (json.RawMessage, e
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("add upstream failed (HTTP %d): %s", status, string(body))
 	}
+	if err := checkZoraxyError(body); err != nil {
+		return nil, err
+	}
 	return json.RawMessage(body), nil
 }
 
@@ -349,6 +370,9 @@ func (z *ZoraxyClient) SetAlias(rootname string, aliases []string) (json.RawMess
 	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("set alias failed (HTTP %d): %s", status, string(body))
+	}
+	if err := checkZoraxyError(body); err != nil {
+		return nil, err
 	}
 	return json.RawMessage(body), nil
 }
