@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	plugin "github.com/dgshue/zoraxy-lb-plugin/mod/zoraxy_plugin"
+	plugin "github.com/dgshue/zoraxy-rest-api-plugin/mod/zoraxy_plugin"
 )
 
 // APIHandler provides bearer-token-authenticated REST endpoints

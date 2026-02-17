@@ -8,7 +8,7 @@ import (
 	"os"
 	"strconv"
 
-	plugin "github.com/dgshue/zoraxy-lb-plugin/mod/zoraxy_plugin"
+	plugin "github.com/dgshue/zoraxy-rest-api-plugin/mod/zoraxy_plugin"
 )
 
 const (
@@ -31,7 +31,7 @@ func main() {
 		Author:        "dgshue",
 		AuthorContact: "",
 		Description:   "REST API for managing Zoraxy proxy rules, upstreams, aliases, and certificates with bearer token authentication",
-		URL:           "https://github.com/dgshue/zoraxy-lb-plugin",
+		URL:           "https://github.com/dgshue/zoraxy-rest-api-plugin",
 		Type:          plugin.PluginType_Utilities,
 		VersionMajor:  0,
 		VersionMinor:  1,
