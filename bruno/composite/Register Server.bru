@@ -20,9 +20,9 @@ body:json {
     "hostname": "clientui-us.example.com",
     "backend_url": "10.0.1.50:8080",
     "require_tls": true,
-    "skip_tls_verify": false,
+    "skip_tls_verify": true,
+    "sticky_session": true,
     "weight": 1,
-    "aliases": ["clientui.example.com"],
     "tags": ["us-lb", "client-ui"]
   }
 }

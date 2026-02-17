@@ -469,7 +469,8 @@ func (a *APIHandler) handleCertUpload(w http.ResponseWriter, r *http.Request) {
 // This performs multiple Zoraxy operations in one call:
 // 1. Creates the proxy rule if it doesn't exist
 // 2. Adds the server as an upstream backend
-// 3. Sets aliases if provided
+// 3. Enables sticky sessions if requested
+// 4. Sets aliases if provided
 type RegisterServerRequest struct {
 	// Hostname is the primary hostname for the proxy rule (e.g., "clientui-us.example.com")
 	Hostname string `json:"hostname"`
@@ -482,6 +483,10 @@ type RegisterServerRequest struct {
 
 	// SkipTLSVerify skips certificate validation for the backend
 	SkipTLSVerify bool `json:"skip_tls_verify"`
+
+	// StickySession enables cookie-based session affinity so requests from the
+	// same client always go to the same backend server
+	StickySession bool `json:"sticky_session"`
 
 	// Weight is the load balancer weight for this upstream (default: 1)
 	Weight int `json:"weight"`
@@ -517,7 +522,8 @@ func (a *APIHandler) handleRegisterServer(w http.ResponseWriter, r *http.Request
 
 	// Step 1: Try to get existing proxy detail; create if not found
 	_, err := a.zoraxy.GetProxyDetail("host", req.Hostname)
-	if err != nil {
+	proxyExisted := err == nil
+	if !proxyExisted {
 		// Proxy doesn't exist — create it
 		tls := "false"
 		if req.RequireTLS {
@@ -529,11 +535,12 @@ func (a *APIHandler) handleRegisterServer(w http.ResponseWriter, r *http.Request
 		}
 
 		params := map[string]string{
-			"type":     "host",
-			"rootname": req.Hostname,
-			"ep":       req.BackendURL,
-			"tls":      tls,
-			"tlsval":   skipVerify,
+			"type":       "host",
+			"rootname":   req.Hostname,
+			"ep":         req.BackendURL,
+			"tls":        tls,
+			"tlsval":     skipVerify,
+			"stickysess": boolStr(req.StickySession),
 		}
 		if len(req.Tags) > 0 {
 			tagsJSON, _ := json.Marshal(req.Tags)
@@ -550,6 +557,23 @@ func (a *APIHandler) handleRegisterServer(w http.ResponseWriter, r *http.Request
 	} else {
 		results["proxy_created"] = false
 		results["proxy_result"] = "already exists"
+	}
+
+	// Step 1b: If sticky session requested and proxy already existed, update it via edit
+	if proxyExisted && req.StickySession {
+		editParams := map[string]string{
+			"type": "host",
+			"ep":   req.Hostname,
+			"ss":   "true",
+		}
+		_, err := a.zoraxy.EditProxy(editParams)
+		if err != nil {
+			results["sticky_session_error"] = err.Error()
+		} else {
+			results["sticky_session_enabled"] = true
+		}
+	} else if req.StickySession {
+		results["sticky_session_enabled"] = true
 	}
 
 	// Step 2: Add upstream server
@@ -680,6 +704,13 @@ func parseJSONBody(r *http.Request) (map[string]string, error) {
 		result[k] = fmt.Sprintf("%v", v)
 	}
 	return result, nil
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
 }
 
 func checkRequired(params map[string]string, required []string) string {
