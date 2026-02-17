@@ -91,7 +91,7 @@ func (a *APIHandler) withAuth(next http.HandlerFunc) http.HandlerFunc {
 // --- Health ---
 
 func (a *APIHandler) handleHealth(w http.ResponseWriter, r *http.Request) {
-	jsonOK(w, map[string]string{"status": "ok", "plugin": "zoraxy-lb-manager", "version": "1.0.0"})
+	jsonOK(w, map[string]string{"status": "ok", "plugin": "zoraxy-rest-api-plugin", "version": "0.1.0"})
 }
 
 // --- Proxy Endpoints ---

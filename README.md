@@ -1,6 +1,6 @@
-# Zoraxy LB Manager Plugin
+# Zoraxy REST API Plugin
 
-A Zoraxy plugin that exposes a bearer-token-authenticated REST API for managing proxy rules, upstream servers (load balancer backends), aliases, and certificates. Designed for integration with Azure DevOps release pipelines.
+A Zoraxy plugin that exposes a bearer-token-authenticated REST API for managing proxy rules, upstream servers (load balancer backends), aliases, and certificates. Designed for integration with CI/CD pipelines and automation.
 
 ## Architecture
 
