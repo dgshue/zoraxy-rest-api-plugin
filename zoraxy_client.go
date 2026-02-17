@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -389,4 +391,79 @@ func (z *ZoraxyClient) ListCerts() (json.RawMessage, error) {
 		return nil, fmt.Errorf("list certs failed (HTTP %d): %s", status, string(body))
 	}
 	return json.RawMessage(body), nil
+}
+
+// UploadCert uploads a certificate file (PEM or key) to Zoraxy.
+// ktype is "pub" for the certificate chain or "pri" for the private key.
+// filename should end in .pem for pub or .key for pri.
+func (z *ZoraxyClient) UploadCert(domain, ktype, filename string, data []byte) (json.RawMessage, error) {
+	if err := z.ensureLoggedIn(); err != nil {
+		return nil, err
+	}
+
+	body, status, err := z.doMultipartUpload(domain, ktype, filename, data)
+	if err != nil {
+		return nil, err
+	}
+
+	// Retry on 401/403 (session/CSRF expired)
+	if status == http.StatusUnauthorized || status == http.StatusForbidden {
+		z.mu.Lock()
+		z.loggedIn = false
+		z.mu.Unlock()
+
+		if err := z.ensureLoggedIn(); err != nil {
+			return nil, err
+		}
+		body, status, err = z.doMultipartUpload(domain, ktype, filename, data)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("upload cert failed (HTTP %d): %s", status, string(body))
+	}
+	if err := checkZoraxyError(body); err != nil {
+		return nil, err
+	}
+	return json.RawMessage(body), nil
+}
+
+// doMultipartUpload sends a multipart form file upload to Zoraxy's cert upload endpoint.
+func (z *ZoraxyClient) doMultipartUpload(domain, ktype, filename string, data []byte) ([]byte, int, error) {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		return nil, 0, fmt.Errorf("creating form file: %w", err)
+	}
+	if _, err := part.Write(data); err != nil {
+		return nil, 0, fmt.Errorf("writing form file: %w", err)
+	}
+	writer.Close()
+
+	uploadURL := fmt.Sprintf("%s/api/cert/upload?ktype=%s&domain=%s",
+		z.baseURL, url.QueryEscape(ktype), url.QueryEscape(domain))
+	req, err := http.NewRequest(http.MethodPost, uploadURL, &buf)
+	if err != nil {
+		return nil, 0, fmt.Errorf("creating upload request: %w", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	if z.csrfToken != "" {
+		req.Header.Set("X-CSRF-Token", z.csrfToken)
+	}
+
+	resp, err := z.client.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("upload request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, fmt.Errorf("reading upload response: %w", err)
+	}
+
+	return body, resp.StatusCode, nil
 }

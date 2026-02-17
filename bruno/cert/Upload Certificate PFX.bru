@@ -1,0 +1,23 @@
+meta {
+  name: Upload Certificate PFX
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/cert/upload
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{token}}
+}
+
+body:json {
+  {
+    "domain": "example.com",
+    "pfx_base64": "<base64-encoded-pfx-data>",
+    "password": ""
+  }
+}

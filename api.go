@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -42,6 +44,7 @@ func (a *APIHandler) RegisterRoutes(router *plugin.PluginUiRouter) {
 
 	// Certificate management
 	router.HandleFunc("/api/cert/list", a.withAuth(a.handleCertList), nil)
+	router.HandleFunc("/api/cert/upload", a.withAuth(a.handleCertUpload), nil)
 
 	// Composite operations (pipeline-friendly)
 	router.HandleFunc("/api/register-server", a.withAuth(a.handleRegisterServer), nil)
@@ -66,6 +69,7 @@ func (a *APIHandler) RegisterRoutesStandalone() {
 	http.HandleFunc("/api/alias/set", a.withAuth(a.handleAliasSet))
 
 	http.HandleFunc("/api/cert/list", a.withAuth(a.handleCertList))
+	http.HandleFunc("/api/cert/upload", a.withAuth(a.handleCertUpload))
 
 	http.HandleFunc("/api/register-server", a.withAuth(a.handleRegisterServer))
 	http.HandleFunc("/api/deregister-server", a.withAuth(a.handleDeregisterServer))
@@ -89,6 +93,7 @@ func (a *APIHandler) RegisterRoutesToMux(mux *http.ServeMux) {
 	mux.HandleFunc("/api/alias/set", a.withAuth(a.handleAliasSet))
 
 	mux.HandleFunc("/api/cert/list", a.withAuth(a.handleCertList))
+	mux.HandleFunc("/api/cert/upload", a.withAuth(a.handleCertUpload))
 
 	mux.HandleFunc("/api/register-server", a.withAuth(a.handleRegisterServer))
 	mux.HandleFunc("/api/deregister-server", a.withAuth(a.handleDeregisterServer))
@@ -326,6 +331,108 @@ func (a *APIHandler) handleCertList(w http.ResponseWriter, r *http.Request) {
 	writeRaw(w, result)
 }
 
+// handleCertUpload uploads a certificate to Zoraxy.
+// Accepts PFX (PKCS12) format and converts to PEM automatically.
+//
+// Supports two modes:
+//   1. Multipart form: field "file" (PFX binary), "domain", "password" (optional)
+//   2. JSON body: {"domain": "...", "pfx_base64": "...", "password": "..."} for pipeline use
+func (a *APIHandler) handleCertUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "Method not allowed, use POST", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var domain, password string
+	var pfxData []byte
+
+	contentType := r.Header.Get("Content-Type")
+
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		// Multipart form upload
+		if err := r.ParseMultipartForm(10 << 20); err != nil { // 10 MB max
+			jsonError(w, "Failed to parse multipart form: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		domain = r.FormValue("domain")
+		password = r.FormValue("password")
+
+		file, _, err := r.FormFile("file")
+		if err != nil {
+			jsonError(w, "Missing required file field: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		pfxData, err = io.ReadAll(file)
+		if err != nil {
+			jsonError(w, "Failed to read uploaded file: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+	} else {
+		// JSON body with base64-encoded PFX
+		var body struct {
+			Domain    string `json:"domain"`
+			PFXBase64 string `json:"pfx_base64"`
+			Password  string `json:"password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			jsonError(w, "Invalid JSON body: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		domain = body.Domain
+		password = body.Password
+
+		var err error
+		pfxData, err = base64.StdEncoding.DecodeString(body.PFXBase64)
+		if err != nil {
+			jsonError(w, "Invalid base64 in pfx_base64: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
+	if domain == "" {
+		jsonError(w, "Missing required field: domain", http.StatusBadRequest)
+		return
+	}
+	if len(pfxData) == 0 {
+		jsonError(w, "Empty PFX data", http.StatusBadRequest)
+		return
+	}
+
+	// Convert PFX to PEM
+	certPEM, keyPEM, err := PFXToPEM(pfxData, password)
+	if err != nil {
+		jsonError(w, "Failed to convert PFX: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	results := make(map[string]interface{})
+
+	// Upload public cert (PEM)
+	pubResult, err := a.zoraxy.UploadCert(domain, "pub", domain+".pem", certPEM)
+	if err != nil {
+		jsonError(w, "Failed to upload certificate: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	results["cert_uploaded"] = true
+	results["cert_result"] = rawOrString(pubResult)
+
+	// Upload private key
+	keyResult, err := a.zoraxy.UploadCert(domain, "pri", domain+".key", keyPEM)
+	if err != nil {
+		results["key_uploaded"] = false
+		results["key_error"] = err.Error()
+		jsonOK(w, results)
+		return
+	}
+	results["key_uploaded"] = true
+	results["key_result"] = rawOrString(keyResult)
+	results["domain"] = domain
+
+	jsonOK(w, results)
+}
+
 // --- Composite Operations (Pipeline-Friendly) ---
 
 // RegisterServerRequest is the payload for the register-server composite endpoint.
@@ -510,6 +617,14 @@ func jsonError(w http.ResponseWriter, msg string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
+// rawOrString tries to use raw JSON, falls back to string if not valid JSON.
+func rawOrString(data json.RawMessage) interface{} {
+	if json.Valid(data) {
+		return data
+	}
+	return string(data)
 }
 
 func writeRaw(w http.ResponseWriter, data json.RawMessage) {
