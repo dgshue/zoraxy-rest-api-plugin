@@ -426,12 +426,11 @@ func (a *APIHandler) handleRegisterServer(w http.ResponseWriter, r *http.Request
 	}
 
 	upstreamParams := map[string]string{
-		"type":   "host",
 		"ep":     req.Hostname,
 		"origin": req.BackendURL,
 		"tls":    requireTLS,
 		"tlsval": skipVerify,
-		"weight": fmt.Sprintf("%d", req.Weight),
+		"active": "true",
 	}
 	upResult, err := a.zoraxy.AddUpstream(upstreamParams)
 	if err != nil {

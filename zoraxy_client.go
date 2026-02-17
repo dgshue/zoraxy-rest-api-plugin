@@ -190,8 +190,11 @@ func (z *ZoraxyClient) rawRequest(method, path string, form url.Values) ([]byte,
 // --- Proxy Management ---
 
 // ListProxies returns all proxy endpoints.
+// Zoraxy requires POST with type=host for this endpoint.
 func (z *ZoraxyClient) ListProxies() (json.RawMessage, error) {
-	body, status, err := z.doRequest(http.MethodGet, "/api/proxy/list", nil)
+	form := url.Values{}
+	form.Set("type", "host")
+	body, status, err := z.doRequest(http.MethodPost, "/api/proxy/list", form)
 	if err != nil {
 		return nil, err
 	}
@@ -202,11 +205,12 @@ func (z *ZoraxyClient) ListProxies() (json.RawMessage, error) {
 }
 
 // GetProxyDetail returns details for a specific proxy endpoint.
+// Zoraxy uses POST with type + epname parameters.
 func (z *ZoraxyClient) GetProxyDetail(epType, rootname string) (json.RawMessage, error) {
 	form := url.Values{}
 	form.Set("type", epType)
-	form.Set("ep", rootname)
-	body, status, err := z.doRequest(http.MethodGet, "/api/proxy/detail", form)
+	form.Set("epname", rootname)
+	body, status, err := z.doRequest(http.MethodPost, "/api/proxy/detail", form)
 	if err != nil {
 		return nil, err
 	}
@@ -266,9 +270,9 @@ func (z *ZoraxyClient) DeleteProxy(epType, rootname string) (json.RawMessage, er
 // --- Upstream (Load Balancer) Management ---
 
 // ListUpstreams returns all upstreams for a proxy endpoint.
+// Zoraxy uses GET with ep query param (utils.GetPara).
 func (z *ZoraxyClient) ListUpstreams(epType, rootname string) (json.RawMessage, error) {
 	form := url.Values{}
-	form.Set("type", epType)
 	form.Set("ep", rootname)
 	body, status, err := z.doRequest(http.MethodGet, "/api/proxy/upstream/list", form)
 	if err != nil {
@@ -281,6 +285,7 @@ func (z *ZoraxyClient) ListUpstreams(epType, rootname string) (json.RawMessage, 
 }
 
 // AddUpstream adds a backend server to a proxy endpoint's load balancer pool.
+// Zoraxy params: ep, origin, tls (bool), tlsval (bool), bpwsorg (bool), active (bool), respt (int), maxconn (int)
 func (z *ZoraxyClient) AddUpstream(params map[string]string) (json.RawMessage, error) {
 	form := url.Values{}
 	for k, v := range params {
@@ -297,6 +302,7 @@ func (z *ZoraxyClient) AddUpstream(params map[string]string) (json.RawMessage, e
 }
 
 // UpdateUpstream modifies an existing upstream server.
+// Zoraxy params: ep, origin, payload (JSON of new upstream fields), active (bool)
 func (z *ZoraxyClient) UpdateUpstream(params map[string]string) (json.RawMessage, error) {
 	form := url.Values{}
 	for k, v := range params {
@@ -313,6 +319,7 @@ func (z *ZoraxyClient) UpdateUpstream(params map[string]string) (json.RawMessage
 }
 
 // RemoveUpstream removes an upstream server from a proxy endpoint.
+// Zoraxy params: ep, origin
 func (z *ZoraxyClient) RemoveUpstream(params map[string]string) (json.RawMessage, error) {
 	form := url.Values{}
 	for k, v := range params {
