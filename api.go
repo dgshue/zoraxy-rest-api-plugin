@@ -484,6 +484,9 @@ type RegisterServerRequest struct {
 	// SkipTLSVerify skips certificate validation for the backend
 	SkipTLSVerify bool `json:"skip_tls_verify"`
 
+	// SkipWebSocketOrigin bypasses the WebSocket origin check for this upstream
+	SkipWebSocketOrigin bool `json:"skip_ws_origin"`
+
 	// StickySession enables cookie-based session affinity so requests from the
 	// same client always go to the same backend server
 	StickySession bool `json:"sticky_session"`
@@ -587,11 +590,12 @@ func (a *APIHandler) handleRegisterServer(w http.ResponseWriter, r *http.Request
 	}
 
 	upstreamParams := map[string]string{
-		"ep":     req.Hostname,
-		"origin": req.BackendURL,
-		"tls":    requireTLS,
-		"tlsval": skipVerify,
-		"active": "true",
+		"ep":      req.Hostname,
+		"origin":  req.BackendURL,
+		"tls":     requireTLS,
+		"tlsval":  skipVerify,
+		"bpwsorg": boolStr(req.SkipWebSocketOrigin),
+		"active":  "true",
 	}
 	upResult, err := a.zoraxy.AddUpstream(upstreamParams)
 	if err != nil {
